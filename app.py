@@ -15,6 +15,12 @@ mae = joblib.load("final_mae.pkl")  # Load MAE
 adjusted_r2 = joblib.load("final_adjusted_r2.pkl")  # Load Adjusted R²
 X_train = pd.read_csv("X_train.csv").drop(columns=["Unnamed: 0"], errors="ignore")
 
+# Load actual vs. predicted values
+actual_vs_predicted = joblib.load("actual_vs_predicted.pkl")
+
+# Convert both key and value to float
+actual_vs_predicted = {float(key): float(value) for key, value in actual_vs_predicted.items()}
+
 # Create SHAP explainer
 explainer = shap.TreeExplainer(model)
 
@@ -49,11 +55,13 @@ def predict():
             key=lambda x: abs(x[2]), reverse=True
         )[:5]
         
+        # Response with all actual vs predicted values
         response = {
             "prediction": float(prediction),
             "mae": float(mae),  # Include MAE
             "adjusted_r2": float(adjusted_r2),  # Include Adjusted R²
-            "top_5_shap_values": shap_list
+            "top_5_shap_values": shap_list,
+            "all_actual_vs_predicted": actual_vs_predicted  # Include all actual vs predicted values
         }
         
         return jsonify(response)

@@ -85,6 +85,14 @@ joblib.dump(best_features, "selected_features.pkl")
 joblib.dump(final_adj_r2, "final_adjusted_r2.pkl")
 joblib.dump(final_mae, "final_mae.pkl")
 
+# **Save Actual vs. Predicted Values as Key-Value Pairs**
+# Explicitly convert both key and value to float
+actual_vs_predicted = dict(zip(y_test, y_pred))
+actual_vs_predicted_float = {float(key): float(value) for key, value in actual_vs_predicted.items()}
+
+# Save the dictionary with float keys and values
+joblib.dump(actual_vs_predicted_float, "actual_vs_predicted.pkl")  # Save the dictionary with floats
+
 # **Plot Actual vs. Predicted values**
 plt.figure(figsize=(8, 6))
 sns.scatterplot(x=y_test, y=y_pred, alpha=0.7)
@@ -108,3 +116,4 @@ print(f"Final Adjusted R² Score: {final_adj_r2:.4f}")
 print(f"Final Mean Absolute Error: {final_mae:.2f}")
 print(f"Final Mean Absolute Percentage Error: {final_mape:.2f}%")
 print("Model saved successfully!")
+print("Actual vs. Predicted values saved successfully as 'actual_vs_predicted.pkl'!")
