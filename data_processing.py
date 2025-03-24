@@ -1,62 +1,50 @@
-from flask import Flask, request, jsonify
-import numpy as np
 import pandas as pd
-import joblib
-import shap
 
-app = Flask(__name__)
+# Load dataset
+df = pd.read_csv("synthetic_claim_data.csv")
 
-# Load model and encoders
-model = joblib.load("random_forest_best_model.pkl")
-binary_encodings = joblib.load("binary_encodings.pkl")
-label_encodings = joblib.load("label_encodings.pkl")
-best_features = joblib.load("selected_features.pkl")
-mae = joblib.load("final_mae.pkl")  # Load MAE
-X_train = pd.read_csv("X_train.csv").drop(columns=["Unnamed: 0"], errors="ignore")
+# Encode categorical variables (Binary Encoding)
+binary_mappings = {
+    "Claimant_Injuries": {"None": 0, "Minor": 1, "Moderate": 2, "Severe": 3},
+    "Repairable_Flag": {"No": 0, "Yes": 1},
+    "Total_Loss_Flag": {"No": 0, "Yes": 1},
+    "Minor_Involved": {"No": 0, "Yes": 1},
+    "Initial_Attorney_Involvement": {"No": 0, "Yes": 1},
+    "Non_Drivable_Flag": {"No": 0, "Yes": 1},
+    "Hospital_Visit": {"No": 0, "Yes": 1},
+    "Pedestrian_Involvement": {"No": 0, "Yes": 1},
+    "Performance_Vehicle": {"No": 0, "Yes": 1}
+}
 
-# Create SHAP explainer
-explainer = shap.TreeExplainer(model)
+df.replace(binary_mappings, inplace=True)
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        # Get input data
-        input_data = request.get_json()
-        input_df = pd.DataFrame([input_data])
-        
-        # Encode categorical features
-        for col, mapping in binary_encodings.items():
-            if col in input_df:
-                input_df[col] = input_df[col].map(mapping).fillna(0)
-        
-        for col, mapping in label_encodings.items():
-            if col in input_df:
-                input_df[col] = input_df[col].astype("category").cat.set_categories(mapping.values()).cat.codes.fillna(-1)
-        
-        # Ensure feature alignment
-        input_df = input_df.reindex(columns=best_features, fill_value=0)
-        
-        # Predict claim cost
-        prediction = model.predict(input_df)[0]
-        
-        # Compute SHAP values
-        shap_values = explainer.shap_values(input_df)
-        
-        # Extract top 5 influential features
-        shap_list = sorted(
-            [(feature, input_data.get(feature, None), float(value)) for feature, value in zip(best_features, shap_values[0])],
-            key=lambda x: abs(x[2]), reverse=True
-        )[:5]
-        
-        response = {
-            "prediction": float(prediction),
-            "mae": float(mae),  # Include MAE in response
-            "top_5_shap_values": shap_list
-        }
-        
-        return jsonify(response)
-    except Exception as e:
-        return jsonify({"error": str(e)})
+# Label encode remaining categorical variables
+for col in ["Primary_Cause_of_Accident", "Initial_Class_of_Claim", "Claimant_State", 
+            "Primary_Accident_Description", "Rate_Class", "Vehicle_Type"]:
+    df[col] = df[col].astype("category").cat.codes
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+# Rename target column
+df.rename({"Claim_Amount": "claim_cost"}, axis=1, inplace=True)
+
+# Remove outliers using IQR only for numerical columns
+def remove_outliers_iqr(dataframe):
+    numerical_cols = dataframe.select_dtypes(include=['number'])  # Select only numeric columns
+    Q1 = numerical_cols.quantile(0.25)
+    Q3 = numerical_cols.quantile(0.75)
+    IQR = Q3 - Q1
+
+    # Define bounds for outliers
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    # Apply outlier removal only on numerical columns
+    df_cleaned = dataframe[~((numerical_cols < lower_bound) | (numerical_cols > upper_bound)).any(axis=1)]
+    
+    return df_cleaned
+
+df = remove_outliers_iqr(df)
+
+# Save cleaned data
+df.to_csv("data.csv", index=False)
+
+print(f"Data saved successfully with {df.shape[0]} rows and {df.shape[1]} columns.")
